@@ -155,10 +155,9 @@ def filter_jsonl(
 
     read_count = written_count = 0
     rejected: Counter[str] = Counter()
-    kept_lengths: list[int] = []
-    # Store only aggregate lengths; corpus-scale callers should prefer histograms in future versions.
+    kept_characters = 0
     def rows() -> Iterator[dict[str, Any]]:
-        nonlocal read_count, written_count
+        nonlocal read_count, written_count, kept_characters
         for row in read_jsonl(input_path):
             read_count += 1
             text = row.get(text_field)
@@ -176,7 +175,7 @@ def filter_jsonl(
                 rejected[reason] += 1
                 continue
             written_count += 1
-            kept_lengths.append(length)
+            kept_characters += length
             yield row
 
     write_jsonl(output_path, rows())
@@ -189,9 +188,9 @@ def filter_jsonl(
         "max_chars": max_chars,
         "min_unique_word_ratio": min_unique_word_ratio,
     }
-    if kept_lengths:
-        report["kept_character_count"] = sum(kept_lengths)
-        report["mean_document_chars"] = sum(kept_lengths) / len(kept_lengths)
+    if written_count:
+        report["kept_character_count"] = kept_characters
+        report["mean_document_chars"] = kept_characters / written_count
     if report_path:
         report_file = Path(report_path)
         report_file.parent.mkdir(parents=True, exist_ok=True)
