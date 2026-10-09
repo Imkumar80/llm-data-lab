@@ -72,7 +72,7 @@ def test_stats_counts_sources(tmp_path):
     write_rows(source, [{"text": "one two", "source": "a"}, {"text": "three"}])
     report = corpus_stats(source)
     assert report["documents"] == 2
-    assert report["characters"] == 13
+    assert report["characters"] == 12
     assert report["source_document_counts"] == {"a": 1, "unknown": 1}
 
 
