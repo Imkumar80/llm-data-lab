@@ -3,7 +3,8 @@ import json
 import pytest
 
 from llm_data_lab.pipeline import (
-    clean_jsonl, clean_text, corpus_stats, deduplicate_jsonl, filter_jsonl, split_jsonl,
+    build_run_manifest, clean_jsonl, clean_text, corpus_stats, deduplicate_jsonl,
+    filter_jsonl, split_jsonl,
 )
 
 
@@ -81,3 +82,26 @@ def test_invalid_split_fraction_rejected(tmp_path):
     write_rows(source, [{"text": "hello"}])
     with pytest.raises(ValueError):
         split_jsonl(source, train, val, val_fraction=1.0)
+
+
+def test_run_manifest_includes_dataset_and_pipeline_metadata(tmp_path):
+    source = tmp_path / "sample.jsonl"
+    write_rows(source, [{"text": "hello world", "source": "demo"}])
+    manifest = build_run_manifest(
+        source,
+        dataset_identifier="demo-corpus",
+        pipeline_config={"condition": "raw", "text_field": "text"},
+        seed=7,
+        model_identifier="demo-model",
+        tokenizer_identifier="demo-tokenizer",
+        model_revision="abc123",
+        tokenizer_revision="def456",
+    )
+    assert manifest["run_name"] == "sample"
+    assert manifest["seed"] == 7
+    assert manifest["input_dataset"]["identifier"] == "demo-corpus"
+    assert manifest["input_dataset"]["checksum_sha256"]
+    assert manifest["pipeline_configuration"] == {"condition": "raw", "text_field": "text"}
+    assert manifest["model"]["identifier"] == "demo-model"
+    assert manifest["model"]["revision"] == "abc123"
+    assert manifest["software"]["python"]

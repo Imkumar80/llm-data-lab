@@ -9,6 +9,7 @@ from typing import Any
 
 from llm_data_lab.pipeline import (
     clean_jsonl, corpus_stats, deduplicate_jsonl, filter_jsonl, split_jsonl,
+    write_run_manifest,
 )
 
 
@@ -59,6 +60,27 @@ def build_parser() -> argparse.ArgumentParser:
     stats.add_argument("--input", required=True)
     stats.add_argument("--text-field", default="text")
     stats.add_argument("--output", default=None)
+
+    manifest = commands.add_parser(
+        "manifest",
+        aliases=["run-manifest", "experiment-manifest"],
+        help="Write a JSON run manifest with dataset, pipeline, and environment metadata.",
+    )
+    manifest.add_argument("--input", required=True)
+    manifest.add_argument("--output", required=True)
+    manifest.add_argument("--run-name", default=None)
+    manifest.add_argument("--dataset-id", default=None)
+    manifest.add_argument("--seed", type=int, default=42)
+    manifest.add_argument("--pipeline-config", default=None,
+                         help="JSON object or path to a JSON file describing the pipeline.")
+    manifest.add_argument("--model", default=None)
+    manifest.add_argument("--tokenizer", default=None)
+    manifest.add_argument("--model-revision", default=None)
+    manifest.add_argument("--tokenizer-revision", default=None)
+    manifest.add_argument("--training-config", default=None,
+                         help="JSON object or path to a JSON file for training settings.")
+    manifest.add_argument("--evaluation-config", default=None,
+                         help="JSON object or path to a JSON file for evaluation settings.")
     return parser
 
 
@@ -87,6 +109,22 @@ def main() -> None:
         _print_report(report)
     elif args.command == "stats":
         _print_report(corpus_stats(args.input, text_field=args.text_field), args.output)
+    elif args.command in {"manifest", "run-manifest", "experiment-manifest"}:
+        report = write_run_manifest(
+            args.output,
+            args.input,
+            run_name=args.run_name,
+            dataset_identifier=args.dataset_id,
+            pipeline_config=args.pipeline_config,
+            seed=args.seed,
+            model_identifier=args.model,
+            tokenizer_identifier=args.tokenizer,
+            model_revision=args.model_revision,
+            tokenizer_revision=args.tokenizer_revision,
+            training_config=args.training_config,
+            evaluation_config=args.evaluation_config,
+        )
+        _print_report(report, None)
 
 
 if __name__ == "__main__":

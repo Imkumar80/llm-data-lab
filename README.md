@@ -11,6 +11,7 @@ LLM Data Lab turns raw text datasets into auditable training corpora. It is bein
 - Configurable document-length and repetition filters
 - Deterministic train/validation splitting without loading the whole corpus into RAM
 - Corpus statistics and machine-readable reports
+- Dataset/run manifest generation with checksums and environment metadata
 - Unit tests and CI
 
 Training runners, tokenizer-aware token counts, experiment manifests, and model evaluation are planned next. This initial release does **not** claim to provide a complete training/evaluation framework yet.
@@ -38,6 +39,8 @@ llm-data-lab filter --input data/deduped.jsonl --output data/filtered.jsonl \
 llm-data-lab split --input data/filtered.jsonl --train data/train.jsonl \
   --validation data/validation.jsonl --val-fraction 0.02 --seed 42
 llm-data-lab stats --input data/filtered.jsonl --output reports/corpus_stats.json
+llm-data-lab manifest --input data/raw.jsonl --output reports/run_manifest.json \
+  --run-name raw-ablation --seed 42 --pipeline-config '{"condition":"raw"}'
 ```
 
 All commands support `--help`. Use `--text-field` to select a different text column. Filter defaults are general-purpose length/repetition heuristics; they do not detect language. Add language-specific checks only when appropriate for the corpus.
@@ -71,7 +74,7 @@ pytest
 
 1. [x] General-purpose cleaning, exact deduplication, filtering, splitting, and statistics
 2. [x] Unit tests and continuous integration
-3. [ ] Dataset manifests with source/version/hash and pipeline configuration
+3. [x] Dataset manifests with source/version/hash and pipeline configuration
 4. [ ] Tokenizer-aware corpus token counts and train/validation leakage checks
 5. [ ] Config-driven CPT/SFT experiment runner
 6. [ ] Standardized evaluation adapters and machine-readable reports
