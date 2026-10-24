@@ -11,9 +11,9 @@ import subprocess
 import sys
 import unicodedata
 from collections import Counter
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Iterator
 from typing import Any
 
 ZERO_WIDTH_RE = re.compile(r"[\u200B-\u200D\uFEFF\u00AD]")
@@ -176,7 +176,7 @@ def filter_jsonl(
             read_count += 1
             text = row.get(text_field)
             if not isinstance(text, str):
-                raise ValueError(f"Record {read_count}: {text_field!r} must be a string")
+                raise TypeError(f"Record {read_count}: {text_field!r} must be a string")
             length = len(text)
             reason = None
             if length < min_chars:
@@ -256,7 +256,7 @@ def corpus_stats(input_path: str | Path, *, text_field: str = "text") -> dict[st
     for index, row in enumerate(read_jsonl(input_path), 1):
         text = row.get(text_field)
         if not isinstance(text, str):
-            raise ValueError(f"Record {index}: {text_field!r} must be a string")
+            raise TypeError(f"Record {index}: {text_field!r} must be a string")
         count += 1
         total_chars += len(text)
         total_words += len(text.split())
