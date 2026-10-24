@@ -3,8 +3,13 @@ import json
 import pytest
 
 from llm_data_lab.pipeline import (
-    build_run_manifest, clean_jsonl, clean_text, corpus_stats, deduplicate_jsonl,
-    filter_jsonl, split_jsonl,
+    build_run_manifest,
+    clean_jsonl,
+    clean_text,
+    corpus_stats,
+    deduplicate_jsonl,
+    filter_jsonl,
+    split_jsonl,
 )
 
 
@@ -32,7 +37,7 @@ def test_clean_jsonl_preserves_metadata_and_drops_empty(tmp_path):
 def test_clean_fails_for_missing_text_field(tmp_path):
     source, target = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
     write_rows(source, [{"content": "hello"}])
-    with pytest.raises(ValueError, match="text"):
+    with pytest.raises(TypeError, match="text"):
         clean_jsonl(source, target)
 
 
@@ -63,7 +68,7 @@ def test_split_is_deterministic_and_disjoint(tmp_path):
     assert train.read_text() == first_train
     assert val.read_text() == first_val
     assert report1 == report2
-    assert set(row["text"] for row in read_rows(train)).isdisjoint(
+    assert {row["text"] for row in read_rows(train)}.isdisjoint(
         row["text"] for row in read_rows(val)
     )
 
