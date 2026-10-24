@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from llm_data_lab.pipeline import (
     build_run_manifest,
@@ -48,6 +49,7 @@ def run_ablation(
     max_chars: int = 100_000,
     min_unique_word_ratio: float = 0.30,
     seed: int = 42,
+    input_metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     source = Path(input_path)
     out = Path(output_dir)
@@ -69,6 +71,7 @@ def run_ablation(
             "path": str(source),
             "sha256": source_hash,
             "documents": input_documents,
+            "source": input_metadata or {},
         },
         "seed": seed,
         "text_field": text_field,
@@ -119,10 +122,15 @@ def run_ablation(
         stats = corpus_stats(corpus, text_field=text_field)
         manifest = build_run_manifest(
             corpus,
-            dataset_identifier=f"{source} [{name}]",
+            dataset_identifier=(
+                f"{input_metadata.get('identifier', source)} [{name}]"
+                if input_metadata
+                else f"{source} [{name}]"
+            ),
             pipeline_config={
                 "condition": name,
                 "description": config["description"],
+                "source_metadata": input_metadata or {},
                 "text_field": text_field,
                 "filter_config": summary["filter_config"] if name == "full_filter" else {},
                 "stages": stages,
@@ -169,7 +177,13 @@ def main() -> None:
     parser.add_argument("--max-chars", type=int, default=100_000)
     parser.add_argument("--min-unique-word-ratio", type=float, default=0.30)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--input-metadata", help="JSON file describing the input dataset source.")
     args = parser.parse_args()
+    metadata = (
+        json.loads(Path(args.input_metadata).read_text(encoding="utf-8"))
+        if args.input_metadata
+        else None
+    )
     summary = run_ablation(
         args.input,
         args.output_dir,
@@ -178,6 +192,7 @@ def main() -> None:
         max_chars=args.max_chars,
         min_unique_word_ratio=args.min_unique_word_ratio,
         seed=args.seed,
+        input_metadata=metadata,
     )
     print(json.dumps(summary, indent=2, ensure_ascii=False))
 

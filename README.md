@@ -12,9 +12,10 @@ LLM Data Lab turns raw text datasets into auditable training corpora. It is bein
 - Deterministic train/validation splitting without loading the whole corpus into RAM
 - Corpus statistics and machine-readable reports
 - Dataset/run manifest generation with checksums and environment metadata
+- A real-data four-condition ablation with pinned public sample provenance and a generated report
 - Unit tests and CI
 
-Training runners, tokenizer-aware token counts, experiment manifests, and model evaluation are planned next. This initial release does **not** claim to provide a complete training/evaluation framework yet.
+Tokenizer-aware corpus profiles, experiment runners, and model evaluation are planned next. The project will keep data preparation usable on its own and add research workflows in small, optional layers; it does **not** claim to provide a complete training/evaluation framework yet.
 
 ## Quickstart
 
@@ -78,7 +79,11 @@ pytest
 4. [ ] Tokenizer-aware corpus token counts and train/validation leakage checks
 5. [ ] Config-driven CPT/SFT experiment runner
 6. [ ] Standardized evaluation adapters and machine-readable reports
-7. [ ] Data-quality ablation example using a small public dataset
+7. [x] Data-quality ablation example using a small public dataset
+
+For the planned experiment and evaluation formats, see [experiment design](docs/experiment_design.md) and [evaluation design](docs/evaluation_design.md).
+The completed [AG News data-quality ablation report](docs/ag_news_ablation_report.md) documents one small, reproducible corpus-level run.
+Long-lived architecture and research-workflow choices are recorded in the [decision log](docs/adr/README.md).
 
 ## Origin
 

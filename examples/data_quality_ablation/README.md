@@ -52,3 +52,20 @@ For a downstream model-quality experiment:
 
 The included sample data is synthetic and only demonstrates the pipeline. It
 must not be used to draw conclusions about real-world model performance.
+
+## Real public-data run
+
+To fetch the pinned 300-row AG News sample, run all four conditions, and write
+the report at `docs/ag_news_ablation_report.md`:
+
+```bash
+python examples/data_quality_ablation/run_public_dataset.py
+```
+
+The script checks the Hugging Face repository revision and sample SHA-256 before
+running. The downloaded sample and condition corpora are stored under the
+gitignored `data/ag_news_ablation/` directory. The committed
+[report](../../docs/ag_news_ablation_report.md) contains corpus statistics and
+provenance, not article text. Hugging Face lists the license as unknown, while
+the dataset card describes research and other non-commercial uses; check the
+source card and upstream terms before reuse.
