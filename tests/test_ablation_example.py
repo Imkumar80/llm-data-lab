@@ -60,5 +60,5 @@ def test_ablation_writes_four_conditions_and_manifests(tmp_path):
 def test_ablation_fails_on_non_string_text_field(tmp_path):
     source = tmp_path / "input.jsonl"
     write_rows(source, [{"text": 123}])
-    with pytest.raises(ValueError, match="must be a string"):
+    with pytest.raises(TypeError, match="must be a string"):
         run_ablation(source, tmp_path / "runs")
