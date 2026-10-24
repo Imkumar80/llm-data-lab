@@ -1,0 +1,10 @@
+{"text":"A language model learns statistical patterns from the text it sees during training. Careful dataset preparation can reduce noise and improve reproducibility.","source":"synthetic-demo","kind":"useful"}
+{"text":"A language model learns statistical patterns from the text it sees during training. Careful dataset preparation can reduce noise and improve reproducibility.","source":"synthetic-duplicate","kind":"duplicate"}
+{"text":"The training corpus should preserve document provenance, license details, and stable checksums. Researchers should record every transformation applied to the data.","source":"synthetic-demo","kind":"useful"}
+{"text":"ha ha ha ha ha ha ha ha ha ha ha ha ha ha ha ha ha ha","source":"synthetic-demo","kind":"repetitive"}
+{"text":"Short note.","source":"synthetic-demo","kind":"short"}
+{"text":"Validation data must remain separate from training data. Exact duplicates should be removed before splitting, and evaluation prompts should not be included in training.","source":"synthetic-demo","kind":"useful"}
+{"text":"Text normalization should be conservative and should not silently change the meaning of a document. Every filter should report how many examples it rejects.","source":"synthetic-demo","kind":"useful"}
+{"text":"Model perplexity depends on tokenization and evaluation protocol. Comparing different tokenizers using raw perplexity alone can be misleading.","source":"synthetic-demo","kind":"useful"}
+{"text":"bad bad bad bad bad bad bad bad bad bad bad bad bad bad bad bad bad bad","source":"synthetic-demo","kind":"repetitive"}
+{"text":"When preparing a corpus, researchers should inspect both retained and rejected examples. Heuristics can remove valid text, especially in multilingual or informal datasets.","source":"synthetic-demo","kind":"useful"}
