@@ -3,12 +3,14 @@ import json
 import pytest
 
 from llm_data_lab.pipeline import (
+    _software_environment,
     build_run_manifest,
     clean_jsonl,
     clean_text,
     corpus_stats,
     deduplicate_jsonl,
     filter_jsonl,
+    sha256_file,
     split_jsonl,
 )
 
@@ -30,7 +32,18 @@ def test_clean_jsonl_preserves_metadata_and_drops_empty(tmp_path):
     source, target = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
     write_rows(source, [{"text": "  hello   world ", "source": "demo"}, {"text": "  "}])
     report = clean_jsonl(source, target)
-    assert report == {"input_documents": 2, "output_documents": 1, "empty_after_cleaning": 1}
+    assert report == {
+        "input_documents": 2,
+        "output_documents": 1,
+        "retained_documents": 1,
+        "rejected_documents": 1,
+        "rejected_by_reason": {"empty_after_cleaning": 1},
+        "empty_after_cleaning": 1,
+        "input_sha256": sha256_file(source),
+        "output_sha256": sha256_file(target),
+        "configuration": {"text_field": "text", "strip_html": True},
+        "software": _software_environment(),
+    }
     assert read_rows(target) == [{"text": "hello world", "source": "demo"}]
 
 
@@ -39,6 +52,17 @@ def test_clean_fails_for_missing_text_field(tmp_path):
     write_rows(source, [{"content": "hello"}])
     with pytest.raises(TypeError, match="text"):
         clean_jsonl(source, target)
+
+
+def test_jsonl_reader_reports_malformed_json_and_same_path_is_rejected(tmp_path):
+    from llm_data_lab.pipeline import read_jsonl
+
+    source = tmp_path / "malformed.jsonl"
+    source.write_text("{not-json}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=r"malformed\.jsonl:1: invalid JSON"):
+        list(read_jsonl(source))
+    with pytest.raises(ValueError, match="paths must be different"):
+        clean_jsonl(source, source)
 
 
 def test_dedupe_removes_exact_text_but_preserves_first_metadata(tmp_path):
@@ -52,11 +76,42 @@ def test_dedupe_removes_exact_text_but_preserves_first_metadata(tmp_path):
 
 def test_filter_reports_rejection_reasons(tmp_path):
     source, target = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
-    write_rows(source, [{"text": "x"}, {"text": "hello hello hello"}, {"text": "one two three"}])
-    report = filter_jsonl(source, target, min_chars=3, min_unique_word_ratio=0.5)
-    assert report["input_documents"] == 3
+    write_rows(
+        source,
+        [
+            {"text": "x"},
+            {"text": "hello hello hello"},
+            {"text": "one two three"},
+            {"text": "a document long enough to exceed the maximum"},
+        ],
+    )
+    report = filter_jsonl(
+        source,
+        target,
+        min_chars=3,
+        max_chars=20,
+        min_unique_word_ratio=0.5,
+    )
+    assert report["input_documents"] == 4
     assert report["output_documents"] == 1
-    assert report["rejected_by_reason"] == {"too_short": 1, "low_unique_word_ratio": 1}
+    assert report["retention_rate"] == 0.25
+    assert report["retained_documents"] == 1
+    assert report["rejected_documents"] == 3
+    assert len(report["input_sha256"]) == len(report["output_sha256"]) == 64
+    assert report["rejected_by_reason"] == {
+        "too_short": 1,
+        "low_unique_word_ratio": 1,
+        "too_long": 1,
+    }
+
+
+def test_filter_rejects_invalid_thresholds(tmp_path):
+    source, target = tmp_path / "in.jsonl", tmp_path / "out.jsonl"
+    write_rows(source, [{"text": "hello world"}])
+    with pytest.raises(ValueError, match="min_chars"):
+        filter_jsonl(source, target, min_chars=5, max_chars=4)
+    with pytest.raises(ValueError, match="unique_word_ratio"):
+        filter_jsonl(source, target, min_unique_word_ratio=1.1)
 
 
 def test_split_is_deterministic_and_disjoint(tmp_path):
@@ -68,6 +123,10 @@ def test_split_is_deterministic_and_disjoint(tmp_path):
     assert train.read_text() == first_train
     assert val.read_text() == first_val
     assert report1 == report2
+    assert report1["input_documents"] == 100
+    assert len(report1["input_sha256"]) == 64
+    assert len(report1["train_sha256"]) == len(report1["validation_sha256"]) == 64
+    assert report1["configuration"] == {"text_field": "text", "val_fraction": 0.2, "seed": 9}
     assert {row["text"] for row in read_rows(train)}.isdisjoint(
         row["text"] for row in read_rows(val)
     )
@@ -80,6 +139,7 @@ def test_stats_counts_sources(tmp_path):
     assert report["documents"] == 2
     assert report["characters"] == 12
     assert report["source_document_counts"] == {"a": 1, "unknown": 1}
+    assert len(report["input_sha256"]) == 64
 
 
 def test_invalid_split_fraction_rejected(tmp_path):
@@ -110,3 +170,4 @@ def test_run_manifest_includes_dataset_and_pipeline_metadata(tmp_path):
     assert manifest["model"]["identifier"] == "demo-model"
     assert manifest["model"]["revision"] == "abc123"
     assert manifest["software"]["python"]
+    assert manifest["input_dataset"]["documents"] == 1
