@@ -1,8 +1,22 @@
+import importlib.util
 import json
+from pathlib import Path
 
 import pytest
 
-from examples.data_quality_ablation.run_ablation import run_ablation
+# Load the example by path: examples/ is intentionally not an installed package.
+_EXAMPLE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "examples"
+    / "data_quality_ablation"
+    / "run_ablation.py"
+)
+_SPEC = importlib.util.spec_from_file_location("run_ablation_example", _EXAMPLE_PATH)
+if _SPEC is None or _SPEC.loader is None:
+    raise ImportError(f"Could not load ablation example from {_EXAMPLE_PATH}")
+_MODULE = importlib.util.module_from_spec(_SPEC)
+_SPEC.loader.exec_module(_MODULE)
+run_ablation = _MODULE.run_ablation
 
 
 def write_rows(path, rows):
