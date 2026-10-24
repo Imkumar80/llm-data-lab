@@ -31,7 +31,7 @@ def _copy_validated(source: Path, destination: Path, text_field: str) -> dict[st
         nonlocal count
         for index, row in enumerate(read_jsonl(source), 1):
             if not isinstance(row.get(text_field), str):
-                raise ValueError(f"Record {index}: {text_field!r} must be a string")
+                raise TypeError(f"Record {index}: {text_field!r} must be a string")
             count += 1
             yield row
 
