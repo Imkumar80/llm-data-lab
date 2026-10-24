@@ -13,7 +13,8 @@ import unicodedata
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterator
+from collections.abc import Iterator
+from typing import Any
 
 ZERO_WIDTH_RE = re.compile(r"[\u200B-\u200D\uFEFF\u00AD]")
 HTML_TAG_RE = re.compile(r"<[^>]+>")
@@ -34,7 +35,7 @@ def read_jsonl(path: str | Path) -> Iterator[dict[str, Any]]:
             except json.JSONDecodeError as exc:
                 raise ValueError(f"{path}:{line_number}: invalid JSON: {exc.msg}") from exc
             if not isinstance(item, dict):
-                raise ValueError(f"{path}:{line_number}: each JSONL row must be an object")
+                raise TypeError(f"{path}:{line_number}: each JSONL row must be an object")
             yield item
 
 
@@ -79,7 +80,7 @@ def clean_jsonl(
             read_count += 1
             value = row.get(text_field)
             if not isinstance(value, str):
-                raise ValueError(
+                raise TypeError(
                     f"Record {read_count}: expected string field {text_field!r}, "
                     f"got {type(value).__name__}"
                 )
@@ -122,7 +123,7 @@ def deduplicate_jsonl(
                     read_count += 1
                     value = row.get(text_field)
                     if not isinstance(value, str):
-                        raise ValueError(f"Record {read_count}: {text_field!r} must be a string")
+                        raise TypeError(f"Record {read_count}: {text_field!r} must be a string")
                     digest = hashlib.sha256(value.encode("utf-8")).hexdigest()
                     cursor = connection.execute(
                         "INSERT OR IGNORE INTO seen(digest) VALUES (?)",
@@ -236,8 +237,8 @@ def split_jsonl(
         for index, row in enumerate(read_jsonl(input_path), 1):
             value = row.get(text_field)
             if not isinstance(value, str):
-                raise ValueError(f"Record {index}: {text_field!r} must be a string")
-            digest = hashlib.sha256(f"{seed}\0{value}".encode("utf-8")).hexdigest()
+                raise TypeError(f"Record {index}: {text_field!r} must be a string")
+            digest = hashlib.sha256(f"{seed}\0{value}".encode()).hexdigest()
             if int(digest, 16) <= threshold:
                 validation.write(json.dumps(row, ensure_ascii=False) + "\n")
                 val_count += 1
