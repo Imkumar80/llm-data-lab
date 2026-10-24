@@ -119,7 +119,7 @@ def run_ablation(
         stats = corpus_stats(corpus, text_field=text_field)
         manifest = build_run_manifest(
             corpus,
-            dataset_identifier=str(source),
+            dataset_identifier=f"{source} [{name}]",
             pipeline_config={
                 "condition": name,
                 "description": config["description"],
