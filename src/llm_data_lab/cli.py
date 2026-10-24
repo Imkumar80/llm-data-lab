@@ -7,6 +7,10 @@ import json
 from pathlib import Path
 from typing import Any
 
+from llm_data_lab.adapters.cpt import prepare_cpt_dataset
+from llm_data_lab.adapters.dpo import check_dpo_split_overlap, prepare_dpo_dataset
+from llm_data_lab.adapters.sft import prepare_sft_dataset
+from llm_data_lab.leakage import NORMALIZATION_POLICIES, check_split_overlap
 from llm_data_lab.pipeline import (
     clean_jsonl,
     corpus_stats,
@@ -15,6 +19,7 @@ from llm_data_lab.pipeline import (
     split_jsonl,
     write_run_manifest,
 )
+from llm_data_lab.token_stats import _load_tokenizer, token_stats
 
 
 def _print_report(report: dict[str, Any], output: str | None = None) -> None:
@@ -64,6 +69,86 @@ def build_parser() -> argparse.ArgumentParser:
     stats.add_argument("--input", required=True)
     stats.add_argument("--text-field", default="text")
     stats.add_argument("--output", default=None)
+    stats.add_argument(
+        "--tokenizer",
+        help="Optional Transformers tokenizer name/path for token counts (requires [transformers]).",
+    )
+    stats.add_argument("--tokenizer-revision", help="Optional tokenizer revision.")
+
+    overlap = commands.add_parser(
+        "overlap", help="Check exact text overlap across two or more named JSONL splits."
+    )
+    overlap.add_argument(
+        "--split",
+        action="append",
+        required=True,
+        metavar="NAME=PATH",
+        help="Named split input; repeat at least twice (example: train=data/train.jsonl).",
+    )
+    overlap.add_argument("--text-field", default="text")
+    overlap.add_argument(
+        "--normalization",
+        choices=NORMALIZATION_POLICIES,
+        default="exact",
+        help="Text comparison policy; normalized comparison uses NFC, casefolding, and whitespace collapse.",
+    )
+    overlap.add_argument("--output", default=None)
+
+    cpt = commands.add_parser(
+        "cpt-prepare", help="Validate and export raw-text data under CPT token limits."
+    )
+    cpt.add_argument("--input", required=True)
+    cpt.add_argument("--output", required=True)
+    cpt.add_argument("--tokenizer", required=True, help="Transformers tokenizer name or path.")
+    cpt.add_argument("--tokenizer-revision", default=None)
+    cpt.add_argument("--text-field", default="text")
+    cpt.add_argument("--max-sequence-length", type=int, required=True)
+    cpt.add_argument("--token-budget", type=int, default=None)
+    cpt.add_argument(
+        "--overflow-policy",
+        choices=["error", "drop", "truncate"],
+        default="drop",
+        help="How to handle documents longer than the sequence limit.",
+    )
+    cpt.add_argument("--report", default=None, help="Optional JSON preparation report path.")
+
+    sft = commands.add_parser(
+        "sft-prepare", help="Validate chat data and export token IDs with assistant masks."
+    )
+    sft.add_argument("--input", required=True)
+    sft.add_argument("--output", required=True)
+    sft.add_argument("--tokenizer", required=True, help="Transformers tokenizer name or path.")
+    sft.add_argument("--tokenizer-revision", default=None)
+    sft.add_argument("--max-sequence-length", type=int, required=True)
+    sft.add_argument("--overflow-policy", choices=["error", "drop", "truncate"], default="drop")
+    sft.add_argument("--truncation-side", choices=["left", "right"], default="right")
+    sft.add_argument("--report", default=None)
+
+    dpo = commands.add_parser(
+        "dpo-prepare", help="Validate and export token-counted preference pairs."
+    )
+    dpo.add_argument("--input", required=True)
+    dpo.add_argument("--output", required=True)
+    dpo.add_argument("--tokenizer", required=True, help="Transformers tokenizer name or path.")
+    dpo.add_argument("--tokenizer-revision", default=None)
+    dpo.add_argument("--max-sequence-length", type=int, required=True)
+    dpo.add_argument("--overflow-policy", choices=["error", "drop", "truncate"], default="drop")
+    dpo.add_argument("--conflict-policy", choices=["report", "error"], default="report")
+    dpo.add_argument(
+        "--prompt-normalization",
+        choices=NORMALIZATION_POLICIES,
+        default="exact",
+    )
+    dpo.add_argument("--report", default=None)
+
+    dpo_overlap = commands.add_parser(
+        "dpo-overlap", help="Check prompt overlap across preference-pair splits."
+    )
+    dpo_overlap.add_argument("--split", action="append", required=True, metavar="NAME=PATH")
+    dpo_overlap.add_argument(
+        "--normalization", choices=NORMALIZATION_POLICIES, default="exact"
+    )
+    dpo_overlap.add_argument("--output", default=None)
 
     manifest = commands.add_parser(
         "manifest",
@@ -112,7 +197,86 @@ def main() -> None:
         )
         _print_report(report)
     elif args.command == "stats":
-        _print_report(corpus_stats(args.input, text_field=args.text_field), args.output)
+        report = corpus_stats(args.input, text_field=args.text_field)
+        if args.tokenizer:
+            report["token_stats"] = token_stats(
+                args.input,
+                tokenizer=args.tokenizer,
+                revision=args.tokenizer_revision,
+                text_field=args.text_field,
+            )
+        _print_report(report, args.output)
+    elif args.command == "overlap":
+        splits: dict[str, str] = {}
+        for spec in args.split:
+            name, separator, path = spec.partition("=")
+            if not separator or not name or not path:
+                raise SystemExit(f"Invalid --split {spec!r}; expected NAME=PATH")
+            if name in splits:
+                raise SystemExit(f"Duplicate split name {name!r}")
+            splits[name] = path
+        _print_report(
+            check_split_overlap(
+                splits,
+                text_field=args.text_field,
+                normalization=args.normalization,
+            ),
+            args.output,
+        )
+    elif args.command == "cpt-prepare":
+        tokenizer = _load_tokenizer(args.tokenizer, args.tokenizer_revision)
+        report = prepare_cpt_dataset(
+            args.input,
+            args.output,
+            tokenizer=tokenizer,
+            tokenizer_identifier=args.tokenizer,
+            tokenizer_revision=args.tokenizer_revision,
+            max_sequence_length=args.max_sequence_length,
+            token_budget=args.token_budget,
+            overflow_policy=args.overflow_policy,
+            text_field=args.text_field,
+            report_path=args.report,
+        )
+        _print_report(report)
+    elif args.command == "sft-prepare":
+        tokenizer = _load_tokenizer(args.tokenizer, args.tokenizer_revision)
+        report = prepare_sft_dataset(
+            args.input,
+            args.output,
+            tokenizer=tokenizer,
+            tokenizer_identifier=args.tokenizer,
+            tokenizer_revision=args.tokenizer_revision,
+            max_sequence_length=args.max_sequence_length,
+            overflow_policy=args.overflow_policy,
+            truncation_side=args.truncation_side,
+            report_path=args.report,
+        )
+        _print_report(report)
+    elif args.command == "dpo-prepare":
+        tokenizer = _load_tokenizer(args.tokenizer, args.tokenizer_revision)
+        report = prepare_dpo_dataset(
+            args.input,
+            args.output,
+            tokenizer=tokenizer,
+            tokenizer_identifier=args.tokenizer,
+            tokenizer_revision=args.tokenizer_revision,
+            max_sequence_length=args.max_sequence_length,
+            overflow_policy=args.overflow_policy,
+            conflict_policy=args.conflict_policy,
+            prompt_normalization=args.prompt_normalization,
+            report_path=args.report,
+        )
+        _print_report(report)
+    elif args.command == "dpo-overlap":
+        splits: dict[str, str] = {}
+        for spec in args.split:
+            name, separator, path = spec.partition("=")
+            if not separator or not name or not path:
+                raise SystemExit(f"Invalid --split {spec!r}; expected NAME=PATH")
+            if name in splits:
+                raise SystemExit(f"Duplicate split name {name!r}")
+            splits[name] = path
+        _print_report(check_dpo_split_overlap(splits, normalization=args.normalization), args.output)
     elif args.command in {"manifest", "run-manifest", "experiment-manifest"}:
         report = write_run_manifest(
             args.output,

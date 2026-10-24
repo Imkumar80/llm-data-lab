@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import json
 import platform
 import re
@@ -51,6 +52,12 @@ def write_jsonl(path: str | Path, rows: Iterator[dict[str, Any]]) -> int:
     return count
 
 
+def _ensure_distinct_paths(source: str | Path, *outputs: str | Path) -> None:
+    paths = [Path(source).resolve(), *(Path(output).resolve() for output in outputs)]
+    if len(set(paths)) != len(paths):
+        raise ValueError("Input, output, and report paths must be different")
+
+
 def clean_text(text: str, *, strip_html: bool = True, collapse_punctuation: bool = True) -> str:
     """Conservatively normalize text; no language-specific transformations."""
     text = unicodedata.normalize("NFC", text)
@@ -71,7 +78,9 @@ def clean_jsonl(
     *,
     text_field: str = "text",
     strip_html: bool = True,
-) -> dict[str, int]:
+) -> dict[str, Any]:
+    _ensure_distinct_paths(input_path, output_path)
+    input_checksum = sha256_file(input_path)
     read_count = written_count = empty_count = 0
 
     def rows() -> Iterator[dict[str, Any]]:
@@ -93,8 +102,18 @@ def clean_jsonl(
             yield row
 
     write_jsonl(output_path, rows())
-    return {"input_documents": read_count, "output_documents": written_count,
-            "empty_after_cleaning": empty_count}
+    return {
+        "input_documents": read_count,
+        "output_documents": written_count,
+        "retained_documents": written_count,
+        "rejected_documents": empty_count,
+        "rejected_by_reason": {"empty_after_cleaning": empty_count} if empty_count else {},
+        "empty_after_cleaning": empty_count,
+        "input_sha256": input_checksum,
+        "output_sha256": sha256_file(output_path),
+        "configuration": {"text_field": text_field, "strip_html": strip_html},
+        "software": _software_environment(),
+    }
 
 
 def deduplicate_jsonl(
@@ -103,13 +122,17 @@ def deduplicate_jsonl(
     *,
     text_field: str = "text",
     database_path: str | Path | None = None,
-) -> dict[str, int]:
+) -> dict[str, Any]:
     """Exact deduplication backed by SQLite to avoid a large in-memory hash set."""
     output = Path(output_path)
+    _ensure_distinct_paths(input_path, output)
+    input_checksum = sha256_file(input_path)
     output.parent.mkdir(parents=True, exist_ok=True)
     db_path = Path(database_path) if database_path else output.with_suffix(".dedupe.sqlite3")
     if db_path.resolve() == output.resolve():
         raise ValueError("SQLite database path must differ from output path")
+    if db_path.resolve() == Path(input_path).resolve():
+        raise ValueError("SQLite database path must differ from input path")
     if db_path.exists():
         db_path.unlink()
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,8 +166,18 @@ def deduplicate_jsonl(
                 db_path.unlink(missing_ok=True)
             except PermissionError:
                 pass
-    return {"input_documents": read_count, "output_documents": written_count,
-            "exact_duplicates_removed": duplicate_count}
+    return {
+        "input_documents": read_count,
+        "output_documents": written_count,
+        "retained_documents": written_count,
+        "rejected_documents": duplicate_count,
+        "rejected_by_reason": {"exact_duplicate": duplicate_count} if duplicate_count else {},
+        "exact_duplicates_removed": duplicate_count,
+        "input_sha256": input_checksum,
+        "output_sha256": sha256_file(output),
+        "configuration": {"text_field": text_field, "deduplication": "exact_text_sha256"},
+        "software": _software_environment(),
+    }
 
 
 def unique_word_ratio(text: str) -> float:
@@ -166,6 +199,10 @@ def filter_jsonl(
         raise ValueError("Require 0 <= min_chars <= max_chars")
     if not 0.0 <= min_unique_word_ratio <= 1.0:
         raise ValueError("min_unique_word_ratio must be between 0 and 1")
+    _ensure_distinct_paths(input_path, output_path)
+    if report_path is not None:
+        _ensure_distinct_paths(input_path, output_path, report_path)
+    input_checksum = sha256_file(input_path)
 
     read_count = written_count = 0
     rejected: Counter[str] = Counter()
@@ -196,11 +233,22 @@ def filter_jsonl(
     report: dict[str, Any] = {
         "input_documents": read_count,
         "output_documents": written_count,
+        "retained_documents": written_count,
+        "rejected_documents": read_count - written_count,
         "retention_rate": written_count / read_count if read_count else 0.0,
         "rejected_by_reason": dict(rejected),
         "min_chars": min_chars,
         "max_chars": max_chars,
         "min_unique_word_ratio": min_unique_word_ratio,
+        "input_sha256": input_checksum,
+        "output_sha256": sha256_file(output_path),
+        "configuration": {
+            "text_field": text_field,
+            "min_chars": min_chars,
+            "max_chars": max_chars,
+            "min_unique_word_ratio": min_unique_word_ratio,
+        },
+        "software": _software_environment(),
     }
     if written_count:
         report["kept_character_count"] = kept_characters
@@ -225,6 +273,7 @@ def split_jsonl(
     if not 0.0 < val_fraction < 1.0:
         raise ValueError("val_fraction must be strictly between 0 and 1")
     train_file, val_file = Path(train_path), Path(validation_path)
+    _ensure_distinct_paths(input_path, train_file, val_file)
     if train_file.resolve() == val_file.resolve():
         raise ValueError("train and validation paths must be different")
     train_file.parent.mkdir(parents=True, exist_ok=True)
@@ -245,9 +294,19 @@ def split_jsonl(
             else:
                 train.write(json.dumps(row, ensure_ascii=False) + "\n")
                 train_count += 1
-    return {"train_documents": train_count, "validation_documents": val_count,
-            "validation_fraction_requested": val_fraction, "seed": seed,
-            "note": "Hash-based assignment is deterministic; realized fraction varies slightly."}
+    return {
+        "input_documents": train_count + val_count,
+        "train_documents": train_count,
+        "validation_documents": val_count,
+        "input_sha256": sha256_file(input_path),
+        "train_sha256": sha256_file(train_file),
+        "validation_sha256": sha256_file(val_file),
+        "configuration": {"text_field": text_field, "val_fraction": val_fraction, "seed": seed},
+        "software": _software_environment(),
+        "validation_fraction_requested": val_fraction,
+        "seed": seed,
+        "note": "Hash-based assignment is deterministic; realized fraction varies slightly.",
+    }
 
 
 def corpus_stats(input_path: str | Path, *, text_field: str = "text") -> dict[str, Any]:
@@ -270,6 +329,9 @@ def corpus_stats(input_path: str | Path, *, text_field: str = "text") -> dict[st
         "mean_chars_per_document": total_chars / count if count else 0.0,
         "mean_words_per_document": total_words / count if count else 0.0,
         "source_document_counts": dict(source_counts),
+        "input_sha256": sha256_file(input_path),
+        "configuration": {"text_field": text_field},
+        "software": _software_environment(),
     }
 
 
@@ -325,7 +387,12 @@ def _load_json_blob(value: Any, *, label: str) -> dict[str, Any]:
 
 
 def _software_environment() -> dict[str, Any]:
+    try:
+        package_version = importlib.metadata.version("llm-data-lab")
+    except importlib.metadata.PackageNotFoundError:
+        package_version = "0.1.0"
     return {
+        "llm_data_lab": package_version,
         "python": sys.version.replace("\n", " "),
         "platform": platform.platform(),
         "platform_system": platform.system(),
@@ -363,6 +430,7 @@ def build_dataset_manifest(
             "identifier": dataset_id,
             "path": str(input_file),
             "checksum_sha256": checksum_value,
+            "documents": sum(1 for _ in read_jsonl(input_file)),
         },
         "pipeline_configuration": _load_json_blob(pipeline_config, label="pipeline"),
         "seed": seed,

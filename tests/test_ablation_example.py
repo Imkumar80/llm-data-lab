@@ -46,8 +46,15 @@ def test_ablation_writes_four_conditions_and_manifests(tmp_path):
 
     assert set(result["conditions"]) == {"raw", "clean", "clean_dedupe", "full_filter"}
     assert result["conditions"]["raw"]["documents_retained"] == 4
+    assert result["conditions"]["clean"]["documents_retained"] == 4
     assert result["conditions"]["clean_dedupe"]["documents_retained"] == 3
-    assert result["conditions"]["full_filter"]["documents_retained"] < 4
+    assert result["conditions"]["clean_dedupe"]["stages"]["dedupe"][
+        "exact_duplicates_removed"
+    ] == 1
+    assert result["conditions"]["full_filter"]["documents_retained"] == 1
+    assert result["conditions"]["full_filter"]["stages"]["filter"][
+        "rejected_by_reason"
+    ] == {"low_unique_word_ratio": 1, "too_short": 1}
     for name in result["conditions"]:
         condition_dir = output / name
         assert (condition_dir / "corpus.jsonl").exists()

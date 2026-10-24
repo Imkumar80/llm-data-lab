@@ -14,6 +14,18 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.5"]
+transformers = ["transformers>=4.44"]
+training = [
+  "accelerate>=1.0,<2",
+  "datasets>=3.0,<5",
+  "torch>=2.4",
+  "transformers>=4.50,<6",
+]
+trl = [
+  "datasets>=3.0,<5",
+  "trl>=0.27,<1",
+  "transformers>=4.50,<6",
+]
 
 [project.scripts]
 llm-data-lab = "llm_data_lab.cli:main"
@@ -28,3 +40,7 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+include = ["src/**/*.py", "tests/**/*.py", "examples/**/*.py"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
