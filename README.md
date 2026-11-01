@@ -2,9 +2,50 @@
 
 **Reproducible data preparation and quality checks for language-model datasets.**
 
+[![Tests](https://github.com/Imkumar80/llm-data-lab/actions/workflows/tests.yml/badge.svg)](https://github.com/Imkumar80/llm-data-lab/actions/workflows/tests.yml)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 LLM Data Lab helps researchers inspect, clean, split, and prepare JSONL corpora for existing training tools. Reports record what was read, what was written, why records were rejected, and the configuration used. Training stays in Transformers, TRL, or another training library.
 
 The project grew from data curation work in [KannadaSLM](https://github.com/Imkumar80/KannadaSLM). Language-specific rules are configurable and are not applied as universal defaults.
+
+## What it does
+
+```mermaid
+flowchart LR
+    A[UTF-8 JSONL corpus] --> B[Clean and validate]
+    B --> C[Exact deduplication]
+    C --> D[Configurable quality filters]
+    D --> E[Deterministic train / validation split]
+    E --> F[Statistics and overlap checks]
+    D --> G{Choose a preparation adapter}
+    G --> H[CPT text]
+    G --> I[SFT conversations]
+    G --> J[DPO preference pairs]
+    F --> K[Versioned audit reports]
+    H --> L[Your training stack]
+    I --> L
+    J --> L
+```
+
+Each step reads and writes JSONL so intermediate data stays inspectable. Reports capture counts, checksums, configuration, and rejection reasons. The core prepares data; your existing training stack owns packing, training, and evaluation.
+
+| If you need to… | Start here |
+| --- | --- |
+| Clean, deduplicate, filter, and split a corpus | [Prepare and inspect a corpus](#prepare-and-inspect-a-corpus) |
+| Measure tokens using a tokenizer | [Tokenizer-aware statistics](#tokenizer-aware-statistics) |
+| Export CPT, SFT, or DPO training examples | [Prepare training data](#prepare-training-data) |
+| Understand input/output fields and report contracts | [Data schemas](docs/data_schemas.md) |
+| Understand package boundaries | [Architecture](docs/architecture.md) |
+| Reproduce the public data-quality experiment | [AG News ablation](docs/ag_news_ablation_report.md) |
+
+## Capabilities at a glance
+
+- **Core with no runtime dependencies:** streaming JSONL validation, conservative cleanup, exact deduplication, configurable filters, and stable seeded splits.
+- **Auditable by design:** SHA-256 checksums, row counts, operation settings, and versioned reports; rejected document contents are not copied into reports.
+- **Optional tokenizer support:** token counts and task-specific export validation without making Transformers a core dependency.
+- **Bring your own trainer:** preparation adapters and handoff examples work with existing Transformers/TRL workflows; no custom training loop is included.
 
 ## Get started
 
